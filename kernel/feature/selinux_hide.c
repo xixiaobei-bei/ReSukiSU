@@ -1493,7 +1493,11 @@ static void security_dump_masked_av(struct context *scontext, struct context *tc
     if (!permissions)
         return;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     tclass_name = sym_name(backup_policydb, SYM_CLASSES, tclass - 1);
+#else
+    tclass_name = backup_policydb->sym_val_to_name[SYM_CLASSES][tclass - 1];
+#endif
     tclass_dat = backup_policydb->class_val_to_struct[tclass - 1];
     common_dat = tclass_dat->comdatum;
 
@@ -1717,13 +1721,21 @@ static void type_attribute_bounds_av(struct context *scontext, struct context *t
     struct type_datum *target;
     u32 masked = 0;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     source = flex_array_get_ptr(backup_policydb->type_val_to_struct_array, scontext->type - 1);
+#else
+    source = backup_policydb->type_val_to_struct[scontext->type - 1];
+#endif
     BUG_ON(!source);
 
     if (!source->bounds)
         return;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     target = flex_array_get_ptr(backup_policydb->type_val_to_struct_array, tcontext->type - 1);
+#else
+    target = backup_policydb->type_val_to_struct[tcontext->type - 1];
+#endif
     BUG_ON(!target);
 
     memset(&lo_avd, 0, sizeof(lo_avd));
@@ -1815,9 +1827,17 @@ static void context_struct_compute_av(struct context *scontext, struct context *
 	 */
     avkey.target_class = tclass;
     avkey.specified = AVTAB_AV | AVTAB_XPERMS;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     sattr = flex_array_get(backup_policydb->type_attr_map_array, scontext->type - 1);
+#else
+    sattr = &backup_policydb->type_attr_map[scontext->type - 1];
+#endif
     BUG_ON(!sattr);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     tattr = flex_array_get(backup_policydb->type_attr_map_array, tcontext->type - 1);
+#else
+    tattr = &backup_policydb->type_attr_map[tcontext->type - 1];
+#endif
     BUG_ON(!tattr);
     ebitmap_for_each_positive_bit(sattr, snode, i)
     {
@@ -1904,9 +1924,15 @@ static int context_struct_to_string(struct context *context, char **scontext, u3
     }
 
     /* Compute the size of the context. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     *scontext_len += strlen(sym_name(backup_policydb, SYM_USERS, context->user - 1)) + 1;
     *scontext_len += strlen(sym_name(backup_policydb, SYM_ROLES, context->role - 1)) + 1;
     *scontext_len += strlen(sym_name(backup_policydb, SYM_TYPES, context->type - 1)) + 1;
+#else
+    *scontext_len += strlen(backup_policydb->sym_val_to_name[SYM_USERS][context->user - 1]) + 1;
+    *scontext_len += strlen(backup_policydb->sym_val_to_name[SYM_ROLES][context->role - 1]) + 1;
+    *scontext_len += strlen(backup_policydb->sym_val_to_name[SYM_TYPES][context->type - 1]) + 1;
+#endif
     *scontext_len += mls_compute_context_len(context);
 
     if (!scontext)
@@ -1921,9 +1947,15 @@ static int context_struct_to_string(struct context *context, char **scontext, u3
     /*
 	 * Copy the user name, role name and type name into the context.
 	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     scontextp += sprintf(scontextp, "%s:%s:%s", sym_name(backup_policydb, SYM_USERS, context->user - 1),
                          sym_name(backup_policydb, SYM_ROLES, context->role - 1),
                          sym_name(backup_policydb, SYM_TYPES, context->type - 1));
+#else
+    scontextp += sprintf(scontextp, "%s:%s:%s", backup_policydb->sym_val_to_name[SYM_USERS][context->user - 1],
+                         backup_policydb->sym_val_to_name[SYM_ROLES][context->role - 1],
+                         backup_policydb->sym_val_to_name[SYM_TYPES][context->type - 1]);
+#endif
 
     mls_sid_to_context(context, &scontextp);
 

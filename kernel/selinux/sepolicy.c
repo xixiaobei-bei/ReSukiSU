@@ -710,7 +710,7 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
         return false;
     }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) || defined(KSU_COMPAT_HAS_MODERN_POLICYDB)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) || defined(KSU_COMPAT_HAS_MODERN_POLICYDB)) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     struct ebitmap *new_type_attr_map_array =
         ksu_kvrealloc(db->type_attr_map_array, value * sizeof(struct ebitmap), (value - 1) * sizeof(struct ebitmap));
 
@@ -749,6 +749,52 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
         ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1, 1);
     }
 
+    return true;
+
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+    /*
+     * For kernel 4.9 and earlier, policydb uses direct pointers:
+     * type_attr_map, type_val_to_struct, sym_val_to_name[SYM_TYPES]
+     * are ordinary arrays, not flex_array.
+     */
+    size_t new_size = sizeof(struct ebitmap) * db->p_types.nprim;
+    struct ebitmap *new_type_attr_map =
+        krealloc(db->type_attr_map, new_size, GFP_KERNEL);
+    if (!new_type_attr_map) {
+        pr_err("add_type: alloc type_attr_map failed\n");
+        return false;
+    }
+    db->type_attr_map = new_type_attr_map;
+    // 4.9's ebitmap_init has two arguments (the second is protectable)
+    ebitmap_init(&db->type_attr_map[value - 1], false);
+    ebitmap_set_bit(&db->type_attr_map[value - 1], value - 1, 1);
+
+    struct type_datum **new_type_val_to_struct =
+        krealloc(db->type_val_to_struct,
+                 sizeof(*db->type_val_to_struct) * db->p_types.nprim,
+                 GFP_KERNEL);
+    if (!new_type_val_to_struct) {
+        pr_err("add_type: alloc type_val_to_struct failed\n");
+        return false;
+    }
+    db->type_val_to_struct = new_type_val_to_struct;
+    db->type_val_to_struct[value - 1] = type;
+
+    char **new_val_to_name_types =
+        krealloc(db->sym_val_to_name[SYM_TYPES],
+                 sizeof(char *) * db->symtab[SYM_TYPES].nprim,
+                 GFP_KERNEL);
+    if (!new_val_to_name_types) {
+        pr_err("add_type: alloc val_to_name failed\n");
+        return false;
+    }
+    db->sym_val_to_name[SYM_TYPES] = new_val_to_name_types;
+    db->sym_val_to_name[SYM_TYPES][value - 1] = key;
+
+    int i;
+    for (i = 0; i < db->p_roles.nprim; ++i) {
+        ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1, 1);
+    }
     return true;
 
 #elif defined(KSU_COMPAT_IS_HISI_LEGACY)
@@ -929,21 +975,23 @@ static bool set_type_state(struct policydb *db, const char *type_name, bool perm
 
 static void add_typeattribute_raw(struct policydb *db, struct type_datum *type, struct type_datum *attr)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) || defined(KSU_COMPAT_HAS_MODERN_POLICYDB)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) || defined(KSU_COMPAT_HAS_MODERN_POLICYDB)) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
     struct ebitmap *sattr = &db->type_attr_map_array[type->value - 1];
 
 #elif defined(KSU_COMPAT_IS_HISI_LEGACY_HM2)
-    /* EMUI 10+ / HM2 dedicated branch (HKIP is closed, use the original flex_array_get) */
     struct ebitmap *sattr = flex_array_get(db->type_attr_map_array, type->value - 1);
 
 #elif defined(KSU_COMPAT_IS_HISI_LEGACY)
-    /*
-    *  HISI_SELINUX_EBITMAP_RO is Huawei's unique features.
-    */
-    struct ebitmap *sattr = &db->type_attr_map[type->value - 1], HISI_SELINUX_EBITMAP_RO;
+    struct ebitmap *sattr = &db->type_attr_map[type->value - 1];
+
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+    /* Linux 4.9 and earlier: type_attr_map is a direct pointer array */
+    struct ebitmap *sattr = &db->type_attr_map[type->value - 1];
+
 #else
     struct ebitmap *sattr = flex_array_get(db->type_attr_map_array, type->value - 1);
 #endif
+
     ebitmap_set_bit(sattr, attr->value - 1, 1);
 
     struct hashtab_node *node;
