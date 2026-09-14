@@ -14,7 +14,7 @@ scroll = "0.13"
 anyhow = "1"
 # If you want to use the following dependencies, please use aarch64-unknown-linux-musl & x86_64-unknown-linux-musl to compile statically
 # rustix = { git = "https://github.com/bytecodealliance/rustix", rev = "7b44528", features = ["mount", "fs", "runtime", "system", "process"] }
-rustix = { git = "https://github.com/Kernel-SU/rustix.git", rev = "4a53fbc", features = ["mount", "fs", "runtime", "system", "process"] }
+rustix = { git = "https://github.com/ReSukiSU/rustix.git", rev = "4a53fbc", features = ["mount", "fs", "runtime", "system", "process"] }
 
 syscalls = { version = "0.8", default-features = false, features = [
     "aarch64",
@@ -23,7 +23,7 @@ syscalls = { version = "0.8", default-features = false, features = [
 
 # for kmsg logging
 log = "0.4"
-kernlog = { git = "https://github.com/kstep/kernlog.rs" }
+kernlog = { git = "https://github.com/ReSukiSU/kernlog.rs" }
 
 [profile.release]
 strip = true
